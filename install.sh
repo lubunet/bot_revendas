@@ -2,9 +2,11 @@
 
 set -e
 
-REPO_URL="https://github.com/lubunet/bot_revendas.git"
+ZIP_URL="https://github.com/lubunet/bot_revendas/archive/refs/heads/main.zip"
 INSTALL_DIR="/root/revenda"
 TEMP_DIR="/tmp/bot_revendas_install"
+ZIP_FILE="/tmp/bot_revendas.zip"
+EXTRACTED_DIR="${TEMP_DIR}/bot_revendas-main"
 SERVICE_NAME="revenda"
 MAIN_FILE="bot.py"
 
@@ -39,8 +41,8 @@ print_header() {
 print_list() {
     echo -e "${YELLOW}Checklist da instalação:${NC}"
     echo -e "  ${STEP1} Atualizar pacotes"
-    echo -e "  ${STEP2} Instalar Git"
-    echo -e "  ${STEP3} Instalar Python 3"
+    echo -e "  ${STEP2} Instalar Python 3"
+    echo -e "  ${STEP3} Instalar curl e unzip"
     echo -e "  ${STEP4} Baixar arquivos do GitHub"
     echo -e "  ${STEP5} Criar pasta /root/revenda"
     echo -e "  ${STEP6} Instalar pyTelegramBotAPI"
@@ -112,18 +114,21 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 run_step STEP1 "Atualizando pacotes do sistema" apt update -y
-run_step STEP2 "Instalando Git" apt install -y git
-run_step STEP3 "Instalando Python 3 e pip" apt install -y python3 python3-pip
-run_step STEP4 "Baixando arquivos do GitHub" git clone "$REPO_URL" "$TEMP_DIR"
+run_step STEP2 "Instalando Python 3 e pip" apt install -y python3 python3-pip
+run_step STEP3 "Instalando curl e unzip" apt install -y curl unzip
+
+run_step STEP4 "Baixando arquivos do GitHub" bash -c "
+rm -rf '$TEMP_DIR' '$ZIP_FILE'
+mkdir -p '$TEMP_DIR'
+curl -L '$ZIP_URL' -o '$ZIP_FILE'
+unzip -o '$ZIP_FILE' -d '$TEMP_DIR'
+"
 
 run_step STEP5 "Criando pasta /root/revenda e movendo arquivos" bash -c "
 rm -rf '$INSTALL_DIR'
 mkdir -p '$INSTALL_DIR'
-find '$TEMP_DIR' -maxdepth 1 -type f -name '*.py' -exec cp {} '$INSTALL_DIR'/ \;
-if [ -f '$TEMP_DIR/install.sh' ]; then
-    cp '$TEMP_DIR/install.sh' '$INSTALL_DIR'/install.sh
-fi
-rm -rf '$TEMP_DIR'
+find '$EXTRACTED_DIR' -maxdepth 1 -type f -name '*.py' -exec cp {} '$INSTALL_DIR'/ \;
+rm -rf '$TEMP_DIR' '$ZIP_FILE'
 "
 
 run_step STEP6 "Instalando pyTelegramBotAPI" pip3 install pyTelegramBotAPI
