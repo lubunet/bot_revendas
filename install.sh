@@ -16,9 +16,6 @@ CYAN='\033[0;36m'
 WHITE='\033[1;37m'
 NC='\033[0m'
 
-CURRENT_STEP=0
-TOTAL_STEPS=8
-
 STEP1="•"
 STEP2="•"
 STEP3="•"
@@ -45,25 +42,10 @@ print_list() {
     echo -e "  ${STEP2} Instalar Git"
     echo -e "  ${STEP3} Instalar Python 3"
     echo -e "  ${STEP4} Baixar arquivos do GitHub"
-    echo -e "  ${STEP5} Criar pasta ${INSTALL_DIR}"
+    echo -e "  ${STEP5} Criar pasta /root/revenda"
     echo -e "  ${STEP6} Instalar pyTelegramBotAPI"
     echo -e "  ${STEP7} Instalar reportlab"
     echo -e "  ${STEP8} Instalar python-dateutil"
-    echo
-}
-
-show_progress() {
-    local label="$1"
-    local percent=$((CURRENT_STEP * 100 / TOTAL_STEPS))
-    local filled=$((percent / 10))
-    local empty=$((10 - filled))
-    local bar="["
-
-    for ((i=0; i<filled; i++)); do bar="${bar}="; done
-    for ((i=0; i<empty; i++)); do bar="${bar} "; done
-    bar="${bar}]"
-
-    echo -e "${BLUE}${bar}${NC} Instalando: ${WHITE}${label}${NC}"
     echo
 }
 
@@ -72,14 +54,56 @@ refresh_screen() {
     print_list
 }
 
-step_start() {
-    CURRENT_STEP=$((CURRENT_STEP + 1))
-    refresh_screen
-    show_progress "$1"
-}
+run_step() {
+    local stepvar="$1"
+    local label="$2"
+    shift 2
 
-step_done() {
+    eval "$stepvar=\"\$doing\""
     refresh_screen
+
+    local frames=(
+        "[=         ]"
+        "[==        ]"
+        "[===       ]"
+        "[ ====     ]"
+        "[  ====    ]"
+        "[   ====   ]"
+        "[    ====  ]"
+        "[     ==== ]"
+        "[      ====]"
+        "[     ==== ]"
+        "[    ====  ]"
+        "[   ====   ]"
+        "[  ====    ]"
+        "[ ====     ]"
+        "[===       ]"
+        "[==        ]"
+    )
+
+    (
+        while true; do
+            for frame in "${frames[@]}"; do
+                printf "\r${BLUE}%b${NC} Instalando: ${WHITE}%s${NC}   " "$frame" "$label"
+                sleep 0.12
+            done
+        done
+    ) &
+    local anim_pid=$!
+
+    if "$@" >/dev/null 2>&1; then
+        kill "$anim_pid" 2>/dev/null || true
+        wait "$anim_pid" 2>/dev/null || true
+        printf "\r\033[K"
+        eval "$stepvar=\"\$done_mark\""
+        refresh_screen
+    else
+        kill "$anim_pid" 2>/dev/null || true
+        wait "$anim_pid" 2>/dev/null || true
+        printf "\r\033[K"
+        echo -e "${RED}Erro durante: ${label}${NC}"
+        exit 1
+    fi
 }
 
 if [ "$EUID" -ne 0 ]; then
@@ -87,69 +111,30 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-STEP1="$doing"
-step_start "Atualizando pacotes do sistema"
-apt update -y >/dev/null 2>&1
-STEP1="$done_mark"
-step_done
+run_step STEP1 "Atualizando pacotes do sistema" apt update -y
+run_step STEP2 "Instalando Git" apt install -y git
+run_step STEP3 "Instalando Python 3 e pip" apt install -y python3 python3-pip
+run_step STEP4 "Baixando arquivos do GitHub" git clone "$REPO_URL" "$TEMP_DIR"
 
-STEP2="$doing"
-step_start "Instalando Git"
-apt install -y git >/dev/null 2>&1
-STEP2="$done_mark"
-step_done
-
-STEP3="$doing"
-step_start "Instalando Python 3 e pip"
-apt install -y python3 python3-pip >/dev/null 2>&1
-STEP3="$done_mark"
-step_done
-
-STEP4="$doing"
-step_start "Baixando arquivos do GitHub"
-rm -rf "$TEMP_DIR"
-git clone "$REPO_URL" "$TEMP_DIR" >/dev/null 2>&1
-STEP4="$done_mark"
-step_done
-
-STEP5="$doing"
-step_start "Criando pasta /root/revenda e movendo os arquivos"
-mkdir -p "$INSTALL_DIR"
-
-find "$TEMP_DIR" -maxdepth 1 -type f -name "*.py" -exec cp {} "$INSTALL_DIR"/ \;
-
-if [ -f "$TEMP_DIR/install.sh" ]; then
-    cp "$TEMP_DIR/install.sh" "$INSTALL_DIR"/install.sh
+run_step STEP5 "Criando pasta /root/revenda e movendo arquivos" bash -c "
+rm -rf '$INSTALL_DIR'
+mkdir -p '$INSTALL_DIR'
+find '$TEMP_DIR' -maxdepth 1 -type f -name '*.py' -exec cp {} '$INSTALL_DIR'/ \;
+if [ -f '$TEMP_DIR/install.sh' ]; then
+    cp '$TEMP_DIR/install.sh' '$INSTALL_DIR'/install.sh
 fi
+rm -rf '$TEMP_DIR'
+"
 
-rm -rf "$TEMP_DIR"
-STEP5="$done_mark"
-step_done
-
-STEP6="$doing"
-step_start "Instalando pyTelegramBotAPI"
-pip3 install pyTelegramBotAPI >/dev/null 2>&1
-STEP6="$done_mark"
-step_done
-
-STEP7="$doing"
-step_start "Instalando reportlab"
-pip3 install reportlab >/dev/null 2>&1
-STEP7="$done_mark"
-step_done
-
-STEP8="$doing"
-step_start "Instalando python-dateutil"
-pip3 install python-dateutil >/dev/null 2>&1
-STEP8="$done_mark"
-step_done
+run_step STEP6 "Instalando pyTelegramBotAPI" pip3 install pyTelegramBotAPI
+run_step STEP7 "Instalando reportlab" pip3 install reportlab
+run_step STEP8 "Instalando python-dateutil" pip3 install python-dateutil
 
 print_header
 print_list
 
 echo -e "${GREEN}Arquivos instalados com sucesso em:${NC} ${WHITE}${INSTALL_DIR}${NC}"
 echo
-
 echo -e "${CYAN}Arquivos .py encontrados na pasta:${NC}"
 ls -1 "${INSTALL_DIR}"/*.py 2>/dev/null || true
 echo
